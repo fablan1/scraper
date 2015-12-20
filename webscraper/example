@@ -1,0 +1,23 @@
+
+[
+  {
+  "title": "vollkornbrot",
+  "haupt":[
+    {"Inhaltsstoff":"Broteinheiten","Menge":"3,2","Einheit":""},
+    {"Inhaltsstoff":"Kilokalorien","Menge":"3,2","Einheit":""}],
+  "vitmanine":[
+    {"Inhaltsstoff":"Vitamin A Retinol","Menge":"0","Einheit":""},
+    {"Inhaltsstoff":"Vitamin D","Menge":"0","Einheit":""}]
+},
+  {
+    "title": "brot2",
+    "haupt":[
+      {"Inhaltsstoff":"Broteinheiten","Menge":"3,2","Einheit":""},
+      {"Inhaltsstoff":"Kilokalorien","Menge":"3,2","Einheit":""}],
+    "vitmanine":[
+      {"Inhaltsstoff":"Vitamin A Retinol","Menge":"0","Einheit":""},
+      {"Inhaltsstoff":"Vitamin D","Menge":"0","Einheit":""}]
+  }
+]
+
+
