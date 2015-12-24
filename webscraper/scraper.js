@@ -5,6 +5,7 @@ var app = express();
 var mysql = require('mysql');
 fs = require('fs');
 
+var quelle = "datenbank";
 
 /**
  * Data-Base Connection
@@ -30,26 +31,54 @@ connection.connect( function(err){
 });
 
 /**
- * Lese CSV-File, Parsen und MYSQL (ausführen)
- * @param CSV-Loading Error {err}
- * @param CSV-Data {data}
+ * Prüfe ob Quelle Datenbank oder CSV  Datei ist und führe Funktion aus
+ * @param quelle {string}
  *
  */
-fs.readFile('Links.csv', 'utf8', function (err,data) {
-    if (err) {
-        return console.log(err);
+function getLinks (quelle) {
+    if (quelle == "datenbank") {
+
+        var query = connection.query('SELECT * FROM lebensmittel LIMIT 10000', function(err, result) {
+
+          //  console.log("Alle Lebensmittel selektiert");
+
+           // console.log(result);
+
+             parseDataFromSite(result,saveToDataBase);
+
+        });
+
+
+
     }
+    else {
 
-    //var arrayData = data.match(/[\w\/.:]*.php/g);
-     var arrayData = data.split("\n");
-    //console.log(data);
-    console.log(arrayData);
+        fs.readFile('Links.csv', 'utf8', function (err,data) {
+            if (err) {
+                return console.log(err);
+            }
+            //var arrayData = data.match(/[\w\/.:]*.php/g);
+
+            var arrayData = data.split("\n");
+           // console.log(arrayData);
 
 
+            for (var i = 0; i< arrayData.length; i++) {
+                var lebensmittelObjekt = {id: i+1, title: "", url:arrayData[i] };
 
-    parseDataFromSite(arrayData,saveToDataBase);
+                arrayData[i] = lebensmittelObjekt;
 
-});
+            }
+
+            parseDataFromSite(arrayData,saveToDataBase);
+
+        });
+    }
+}
+
+
+//Funktion ausführen
+getLinks(quelle);
 
 /**
  * function parse Data From Site
@@ -65,84 +94,118 @@ function parseDataFromSite (arrayData,cb) {
 
     var lebensmittelArray = [];
 
-    var lebensmittel = {};
-
     // Jeden Link besuchen:
+    console.time("requests");
     for (var i = 0; i < arrayData.length; i++) {
-        //Array-Wert in Variable um request einzufügen
-        var URLfromArray= arrayData[i];
-        //Führe request mit URL aus dem Array aus
-        request(URLfromArray, function (error, response, body) {
-            //Wenn Link ein 200 ist, dann Daten aus Seite parsen und als Wert in Array speichern
-            if (!error) {
 
-                var $ = cheerio.load(body);
-
-                var title = $('h1','#contentHeader').text();
-
-             //   console.log(title);
-
-                lebensmittel = {path: response.req.path, title: title};
-
-                //für jede einzelne Tabelle
-                lebensmittel.hauptnaehrstoffe = parseHauptnaehrstoffe($,"#container1");
+      // Führe Funktion linkBesuchen aus
+        linkBesuchen(arrayData[i],function(lebensmittel){
+         console.log("counter:"+ counter, lebensmittel.title);
+            if (lebensmittel !== false){
 
                 lebensmittelArray.push(lebensmittel);
 
-               // console.log(lebensmittel);
-
-            } else {
-                //Wenn Link kein 200 ist, in ein separate Array speichern
-                var errorStatus =  arrayData +": " + error;
-                var errorLog = [];
-                errorLog.push(errorStatus);
-                console.log(errorLog);
             }
-            //Prüfe ob Array-Länge erreicht wurde
+
             if (counter === arrayData.length-1){
+                console.timeEnd("requests");
                 cb(lebensmittelArray); //Array übergeben aus der For-Schleife.
-                console.log("Alle URLs besucht");
+                //console.log("Alle URLs besucht");
+
             } else {
                 //Wenn Array-Länge nicht erreicht wurde erhöhe Counter um 1
                 counter++;
             }
+
         });
 
     }
 }
 
+
 /**
- * HELPER-FUNCTION: saveToDataBase
- * @param title {title}
+ * HELPER-FUNCTION: linkBesuchen
+ * @param lebensmittel {object}
  *
  *
  */
+function linkBesuchen (lebensmittel,cb) {
+
+    request(lebensmittel.url,{timeout: 4000}, function (error, response, body) { //Funktion draus machen Stichwort: Asynchron ... --> fehler da SCOPE nicht berücksichtigt wird.
+        //Wenn Link ein 200 ist, dann Daten aus Seite parsen und als Wert in Array speichern
+
+
+        if (!error) {
+
+            var $ = cheerio.load(body);
+
+            var title = $('h1','#contentHeader').text();
+
+            //console.log(title);
+
+            lebensmittel = {path: response.req.path, title: title, id: lebensmittel.id }; // Warum wird lebensmittel rechts nicht überschrieben? Stichwort: Assoziativität
+
+            //für jede einzelne Tabelle
+            lebensmittel.hauptnaehrstoffe = parseHauptnaehrstoffe($,"#container1");
+
+
+
+            cb(lebensmittel);
+
+        } else {
+            //Wenn Link kein 200 ist, in ein separate Array speichern
+            var errorStatus =  lebensmittel +": " + error;
+            var errorLog = [];
+            errorLog.push(errorStatus);
+            // console.log(errorLog);
+            cb(false);
+        }
+
+    });
+}
+
+
+/**
+ * HELPER-FUNCTION: saveToDataBase
+ * @param lebensmittelArray {array}
+ *
+ *
+ */
+// ERWEITERUNG FÜR JEDE TABELLE !!! UND IN INSERT STRING REIN PACKEN 132-140
 function saveToDataBase(lebensmittelArray) {
     //var post  = {title: title};
     var insertString = "";
-    console.log(lebensmittelArray);
+    //console.log(lebensmittelArray[0].hauptnaehrstoffe[1]);
 
     for (var z = 0; z < lebensmittelArray.length; z++) {
 
-        for (var table in lebensmittelArray[z]) {
+        var lebensmittel  = lebensmittelArray[z];
 
-            if(table !== title) {
-                for (var i = 0; i < table.length; i++) {
-                    var inhaltsstoff = table[i];
-                    insertString += "(1, '"+inhaltsstoff.inhaltsstoff+"', '"+inhaltsstoff.menge+"', '"+inhaltsstoff.einheit+"', CURRENT_TIMESTAMP), ";
+        for (var eigenschaft in lebensmittel) {
+            // JEDE DIESER IF BEDINGUNG ANPASSEN, DAMIT DURCH DIE INHALTE GELOOPT WERDEN KANN
+            if(eigenschaft === "hauptnaehrstoffe") {
+
+                for (var i = 0; i < lebensmittel.hauptnaehrstoffe.length; i++) {
+
+                    var inhaltsstoff = lebensmittel.hauptnaehrstoffe[i];
+              //FUNCTION DEFINIEREN DIE ZU insertString hinzufügt ......
+                    insertString += "("+lebensmittel.id+", '"+inhaltsstoff.inhaltsstoff+"', '"+inhaltsstoff.menge+"', '"+inhaltsstoff.einheit+"', CURRENT_TIMESTAMP),";
                 }
             }
         }
     }
+
     insertString = insertString.substr(0,insertString.length-1);
-  //  console.log(insertString);
+    // console.log(insertString);
+
+    console.time("datenbankInsert");
 
     var query = connection.query('INSERT INTO inhaltsstoffe (lebensmittel_id, titel, menge, einheit, erstellt) VALUES ' + insertString, function(err, result) {
 
         console.log("Datenimport nach MySQL abgeschlossen");
-
+        console.timeEnd("datenbankInsert");
     });
-  //  console.log(query.sql);
+    //  console.log(query.sql);
 }
 
 
